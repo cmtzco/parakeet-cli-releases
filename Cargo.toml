@@ -1,0 +1,23 @@
+[package]
+name = "parakeet-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI wrapper around parakeet-rs for local speech-to-text transcription"
+license = "MIT"
+repository = "https://github.com/cmtzco/parakeet-cli-releases"
+
+[[bin]]
+name = "parakeet-cli"
+path = "src/main.rs"
+
+[dependencies]
+parakeet-rs = "0.3"
+hound = "3.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

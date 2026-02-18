@@ -1,0 +1,94 @@
+name: Build and Release
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/build.yml"
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14 # Apple Silicon runner (native)
+    name: Build (aarch64-apple-darwin)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: aarch64-apple-darwin
+
+      - name: Build release binary
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp target/aarch64-apple-darwin/release/parakeet-cli dist/parakeet-cli
+          cd dist
+          tar -czf parakeet-cli-aarch64-apple-darwin.tar.gz parakeet-cli
+          shasum -a 256 parakeet-cli-aarch64-apple-darwin.tar.gz > parakeet-cli-aarch64-apple-darwin.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: parakeet-cli-aarch64-apple-darwin
+          path: |
+            dist/parakeet-cli-aarch64-apple-darwin.tar.gz
+            dist/parakeet-cli-aarch64-apple-darwin.tar.gz.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Create Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=parakeet-cli-v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "parakeet-cli ${{ steps.version.outputs.version }}"
+          body: |
+            Pre-built `parakeet-cli` binaries for macOS.
+
+            Thin CLI wrapper around [parakeet-rs](https://github.com/altunenes/parakeet-rs)
+            for local speech-to-text transcription using NVIDIA Parakeet TDT.
+
+            **Assets:**
+            - `parakeet-cli-aarch64-apple-darwin.tar.gz` — Apple Silicon (M1/M2/M3/M4)
+
+            > **Note:** Intel Mac (x86_64) is not currently supported.
+            > ONNX Runtime does not provide prebuilt binaries for x86_64-apple-darwin.
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.sha256
